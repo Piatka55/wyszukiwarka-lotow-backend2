@@ -1,6 +1,6 @@
 const express = require('express');
 const { request } = require('undici');
-const pLimit = require('p-limit');
+const pLimit = require('p-limit').default;
 const cors = require('cors');
 
 const app = express();
@@ -142,4 +142,5 @@ setInterval(refreshAzjaFlights, 15 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
+
 });
