@@ -6,9 +6,8 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
-const MAX_CONCURRENT_REQUESTS = 10;
+const MAX_CONCURRENT_REQUESTS = 5; // zmniejszone do 5
 
-// Lotniska startowe
 const searchFromAirports = [
   'WAW', 'KRK', 'KTW', 'POZ', 'GDN',        // Polska
   'FRA', 'MUC', 'TXL', 'DUS', 'HAM',        // Niemcy
@@ -20,7 +19,6 @@ const searchFromAirports = [
   'BTS'                                     // Bratysława
 ];
 
-// Lotniska docelowe - Azja i pobliskie
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -66,14 +64,12 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   try {
     const { body, statusCode } = await request(url);
     if (statusCode !== 200) {
-      console.error(`Błąd API (roundtrip): status ${statusCode} dla ${url}`);
-      return null;
+      throw new Error(`Błąd API status ${statusCode} dla ${url}`);
     }
     const text = await body.text();
     return { from, to, monthOutbound, monthInbound, data: JSON.parse(text) };
   } catch (e) {
-    console.error(`Błąd pobierania (roundtrip) ${url}:`, e.message);
-    return null;
+    throw new Error(`Błąd pobierania ${url}: ${e.message}`);
   }
 }
 
@@ -84,9 +80,8 @@ async function refreshAzjaFlightsRoundtrip() {
 
   const now = new Date();
   const endDate = new Date(now);
-  endDate.setFullYear(now.getFullYear() + 1);
+  endDate.setMonth(endDate.getMonth() + 6); // pół roku w przód
 
-  // Lista miesięcy za rok do przodu
   const months = [];
   let d = new Date(now.getFullYear(), now.getMonth(), 1);
   while (d <= endDate) {
@@ -99,12 +94,24 @@ async function refreshAzjaFlightsRoundtrip() {
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
       for (let i = 0; i < months.length; i++) {
-        for (let j = i; j < months.length; j++) {  // return month >= outbound month
+        for (let j = i; j < months.length; j++) {
           tasks.push(limit(async () => {
-            const result = await fetchRoundtripData(from, dest.iata, months[i], months[j]);
-            if (result) {
-              azjaFlightsCache.push(result);
-              console.log(`Pobrano roundtrip: ${from} → ${dest.iata} ${months[i]} → ${months[j]}`);
+            let attempts = 0;
+            let success = false;
+            while (attempts < 2 && !success) {
+              try {
+                const result = await fetchRoundtripData(from, dest.iata, months[i], months[j]);
+                azjaFlightsCache.push(result);
+                console.log(`Pobrano roundtrip: ${from} → ${dest.iata} ${months[i]} → ${months[j]}`);
+                success = true;
+              } catch (error) {
+                attempts++;
+                if (attempts >=2) {
+                  console.error(`Błąd przy pobieraniu lotów ${from} → ${dest.iata} ${months[i]} → ${months[j]}:`, error.message);
+                } else {
+                  console.log(`Retry (${attempts}) dla ${from} → ${dest.iata} ${months[i]} → ${months[j]}`);
+                }
+              }
             }
           }));
         }
