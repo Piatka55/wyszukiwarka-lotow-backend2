@@ -25,7 +25,6 @@ const azjaAirports = [
   { iata: 'HAN', country: 'Vietnam', city: 'Hanoi' },
   { iata: 'NQZ', country: 'Kazakhstan', city: 'Astana' },
   { iata: 'ALA', country: 'Kazakhstan', city: 'Almaty' },
-  { iata: 'FRU', country: 'Kyrgyzstan', city: 'Bishkek' },
   { iata: 'MNL', country: 'Philippines', city: 'Manila' },
   { iata: 'CGK', country: 'Indonesia', city: 'Jakarta' },
   { iata: 'DPS', country: 'Indonesia', city: 'Bali Denpasar' },
@@ -176,3 +175,4 @@ setInterval(refreshAzjaFlightsRoundtrip, 15*60*1000);
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
