@@ -1,6 +1,6 @@
 const express = require('express');
 const { request } = require('undici');
-const pLimit = require('p-limit');
+const pLimit = require('p-limit').default;
 const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -169,3 +169,4 @@ app.post('/api/batch-oneway', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer uruchomiony na http://localhost:${PORT}`);
 });
+
