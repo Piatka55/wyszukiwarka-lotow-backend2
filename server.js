@@ -4,169 +4,108 @@ const pLimit = require('p-limit').default;
 const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627";
-const MAX_CONCURRENT_REQUESTS = 15; // pod cache i batch
+const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
+const MAX_CONCURRENT_REQUESTS = 5;
+
+const searchFromAirports = ['POZ'];
+const azjaAirports = [{ iata: 'ICN', country: 'South Korea', city: 'Seoul' }];
+
+let azjaFlightsCache = {}; // klucz: from-to, wartość: tablica lotów
+let lastAzjaRefresh = null;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static('.'));
+
+// Limit równoległych zapytań
 const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
-// --- CACHING: tylko POZ → ICN i roundtrip ---
-let flightsCache = [];
-let lastCacheRefresh = null;
-
-// Pętla miesięcy
-function getMonthsAhead(n) {
-  const months = [];
-  const now = new Date();
-  for (let i = 0; i < n; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
-  return months;
+function generateCacheKey(from, to) {
+  return `${from}-${to}`;
 }
 
-// Pobieranie roundtrip z cache
-async function fetchRoundtrip(from, to, outMonth, inMonth) {
-  const url = `https://www.skyscanner.se/g/monthviewservice/PL/PLN/pl-PL/calendar/${from}/${to}/${outMonth}/${inMonth}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
-  try {
-    const { body, statusCode } = await request(url);
-    const text = await body.text();
-    if (statusCode !== 200) throw new Error(`API error: ${statusCode} ${url}`);
-    const parsed = JSON.parse(text);
-    // MinPrice może być: parsed.MinPrice, parsed.quotes, parsed.Days, etc.
-    // Najczęściej w minimalmonthviewgridv2 używamy parsed.Days[dzien].MinPrice
-    let bestDay = null;
-    let bestPrice = Infinity;
-    if (parsed.Days) {
-      for (const day of Object.values(parsed.Days)) {
-        if (day.MinPrice && day.MinPrice < bestPrice) {
-          bestDay = day;
-          bestPrice = day.MinPrice;
-        }
+async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
+  const url = `https://www.skyscanner.se/g/monthviewservice/PL/PLN/pl-PL/calendar/${from}/${to}/${monthOutbound}/${monthInbound}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
+  let attempts = 0;
+  while (attempts < 2) {
+    attempts++;
+    try {
+      const { body, statusCode } = await request(url);
+      if (statusCode !== 200) {
+        if (attempts >= 2) throw new Error(`Błąd API status ${statusCode} dla ${url}`);
+        console.log(`Status ${statusCode}, retry ${attempts} dla ${url}`);
+        continue;
       }
+      const text = await body.text();
+      return { from, to, monthOutbound, monthInbound, data: JSON.parse(text) };
+    } catch (e) {
+      if (attempts >= 2) throw e;
+      console.error(`Błąd pobierania (retry ${attempts}): ${url} - ${e.message}`);
+      await new Promise(r => setTimeout(r, 1000));
     }
-    if (bestDay) {
-      return {
-        from, to, outMonth, inMonth,
-        minPrice: bestDay.MinPrice,
-        bestDay: bestDay.Date,
-      };
-    }
-    return null;
-  } catch (e) {
-    console.error(`Błąd pobierania roundtrip: ${e.message}`);
-    return null;
   }
 }
 
-// Odświeżacz cache
-async function refreshCache() {
-  const from = 'POZ';
-  const to = 'ICN';
-  const months = getMonthsAhead(6);
-  const flights = [];
+async function refreshAzjaFlightsRoundtrip() {
+  console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów POZ → ICN.`);
+
+  azjaFlightsCache = {};
+  lastAzjaRefresh = new Date();
+
+  const now = new Date();
+  const endDate = new Date(now);
+  endDate.setMonth(endDate.getMonth() + 6);
+
+  const months = [];
+  let d = new Date(now.getFullYear(), now.getMonth(), 1);
+  while (d <= endDate) {
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`);
+    d.setMonth(d.getMonth() + 1);
+  }
+
+  const key = generateCacheKey('POZ', 'ICN');
+  azjaFlightsCache[key] = [];
+
   const tasks = [];
   for (let i = 0; i < months.length; i++) {
     for (let j = i; j < months.length; j++) {
-      tasks.push(limit(() => fetchRoundtrip(from, to, months[i], months[j])));
+      tasks.push(limit(async () => {
+        try {
+          const flight = await fetchRoundtripData('POZ', 'ICN', months[i], months[j]);
+          if (flight && flight.data) {
+            azjaFlightsCache[key].push(flight);
+            console.log(`Pobrano roundtrip: POZ → ICN ${months[i]} → ${months[j]}`);
+          }
+        } catch (e) {
+          console.error(`Błąd pobierania lotów POZ → ICN ${months[i]} → ${months[j]}: ${e.message}`);
+        }
+      }));
     }
   }
-  const results = await Promise.all(tasks);
-  results.forEach(x => {
-    if (x && x.minPrice) flights.push(x);
-  });
-  // Sortuj po cenie + limituj do 10 najtańszych
-  flightsCache = flights.sort((a, b) => a.minPrice - b.minPrice).slice(0, 10);
-  lastCacheRefresh = new Date();
-  console.log(`[${lastCacheRefresh.toISOString()}] Flights cache updated: ${flightsCache.length} entries`);
+
+  await Promise.all(tasks);
+
+  // Posortuj cache po cenie jeśli jest w danych MinPrice, lub else ustaw cenę na Infinity  
+  azjaFlightsCache[key] = azjaFlightsCache[key]
+    .filter(f => f.data) // filtrujemy null lub brak danych
+    .map(f => ({
+      ...f,
+      price: (f.data.MinPrice !== undefined && f.data.MinPrice !== null) ? f.data.MinPrice : Infinity,
+    }))
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 20);
+
+  lastAzjaRefresh = new Date();
+  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${azjaFlightsCache[key].length}`);
 }
 
-// Endpoint do cache
-app.get('/api/cached-flights', (req, res) => {
-  res.json({
-    refreshed: lastCacheRefresh,
-    flights: flightsCache
-  });
+app.get('/api/azja-flights', (req, res) => {
+  res.json({ refreshed: lastAzjaRefresh, flightsByRoute: azjaFlightsCache });
 });
 
-// Automatyczne odświeżanie co 15 minut
-refreshCache();
-setInterval(refreshCache, 15 * 60 * 1000);
+refreshAzjaFlightsRoundtrip();
+setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 
-// --- Reszta Twoich endpointów z batch i on-demand ---
-app.use(express.json());
-app.use(cors());
-app.use(express.static('.'));
-
-// --- POJEDYNCZY ONEWAY ---
-app.get('/api/oneway', async (req, res) => {
-  const { from, to, month, currency, locale } = req.query;
-  if (!from || !to || !month || !currency || !locale) {
-    return res.status(400).json({ error: 'Brakujące parametry dla lotu w jedną stronę.' });
-  }
-  const skyscannerUrl = `https://www.skyscanner.pl/g/monthviewservice/PL/${currency}/${locale}/calendar/${from}/${to}/${month}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
-  try {
-    const { body, statusCode } = await request(skyscannerUrl);
-    const text = await body.text();
-    if (statusCode !== 200) throw new Error(`Błąd API: ${statusCode}`);
-    res.json(JSON.parse(text));
-  } catch (error) {
-    res.status(500).json({ error: 'Nie udało się pobrać danych z API Skyscannera.' });
-  }
-});
-
-// --- POJEDYNCZY ROUNDTRIP ---
-app.get('/api/flights', async (req, res) => {
-  const { from, to, month, returnMonth, currency, locale } = req.query;
-  if (!from || !to || !month || !returnMonth || !currency || !locale) {
-    return res.status(400).json({ error: 'Brakujące parametry dla lotu w obie strony.' });
-  }
-  const skyscannerUrl = `https://www.skyscanner.se/g/monthviewservice/PL/${currency}/${locale}/calendar/${from}/${to}/${month}/${returnMonth}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
-  try {
-    const { body, statusCode } = await request(skyscannerUrl);
-    const text = await body.text();
-    if (statusCode !== 200) throw new Error(`Błąd API: ${statusCode}`);
-    res.json(JSON.parse(text));
-  } catch (error) {
-    res.status(500).json({ error: 'Nie udało się pobrać danych z API Skyscannera.' });
-  }
-});
-
-// --- BATCH ONEWAY ---
-async function fetchUrl(url) {
-  try {
-    const { body, statusCode } = await request(url);
-    const text = await body.text();
-    return statusCode === 200
-      ? JSON.parse(text)
-      : { error: `HTTP ${statusCode}`, body: text };
-  } catch {
-    return { error: "Undici fetch error" };
-  }
-}
-app.post('/api/batch-oneway', async (req, res) => {
-  const { queries, currency = "PLN", locale = "pl-PL" } = req.body;
-  if (!Array.isArray(queries) || queries.length === 0) {
-    return res.status(400).json({ error: "Brak poprawnych danych wejściowych (queries[])." });
-  }
-  const limit = pLimit(MAX_CONCURRENT_REQUESTS);
-  const urls = queries.map(({ from, to, month }) =>
-    `https://www.skyscanner.pl/g/monthviewservice/PL/${currency}/${locale}/calendar/${from}/${to}/${month}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`
-  );
-  try {
-    const tasks = urls.map((url, i) => limit(() => fetchUrl(url)));
-    const results = await Promise.all(tasks);
-    res.json(
-      results.map((result, i) => ({
-        query: queries[i],
-        result
-      }))
-    );
-  } catch (e) {
-    res.status(500).json({ error: "Błąd batchowania zapytań do Skyscannera." });
-  }
-});
-
-// uruchom serwer
 app.listen(PORT, () => {
-  console.log(`Serwer uruchomiony na http://localhost:${PORT}`);
+  console.log(`Serwer działa na http://localhost:${PORT}`);
 });
-
