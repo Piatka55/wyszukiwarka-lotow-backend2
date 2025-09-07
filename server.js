@@ -2,22 +2,49 @@ const express = require('express');
 const { request } = require('undici');
 const pLimit = require('p-limit').default;
 const cors = require('cors');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['POZ'];
-const azjaAirports = [{ iata: 'ICN', country: 'South Korea', city: 'Seoul' }];
+const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA'];
+const azjaAirports = [
+  { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
+  { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
+  { iata: 'PEK', country: 'China', city: 'Beijing' },
+  { iata: 'PVG', country: 'China', city: 'Shanghai' },
+  { iata: 'HND', country: 'Japan', city: 'Tokyo' },
+  { iata: 'NRT', country: 'Japan', city: 'Tokyo' },
+  { iata: 'ICN', country: 'South Korea', city: 'Seoul' },
+  { iata: 'SGN', country: 'Vietnam', city: 'Ho Chi Minh City' },
+  { iata: 'HAN', country: 'Vietnam', city: 'Hanoi' },
+  { iata: 'NQZ', country: 'Kazakhstan', city: 'Astana' },
+  { iata: 'ALA', country: 'Kazakhstan', city: 'Almaty' },
+  { iata: 'MNL', country: 'Philippines', city: 'Manila' },
+  { iata: 'CGK', country: 'Indonesia', city: 'Jakarta' },
+  { iata: 'DPS', country: 'Indonesia', city: 'Bali Denpasar' },
+  { iata: 'CMB', country: 'Sri Lanka', city: 'Colombo' },
+  { iata: 'DEL', country: 'India', city: 'Delhi' },
+  { iata: 'MCT', country: 'Oman', city: 'Muscat' },
+  { iata: 'DOH', country: 'Qatar', city: 'Doha' },
+  { iata: 'DXB', country: 'United Arab Emirates', city: 'Dubai' },
+  { iata: 'AUH', country: 'United Arab Emirates', city: 'Abu Dhabi' },
+  { iata: 'SIN', country: 'Singapore', city: 'Singapore' },
+  { iata: 'TBS', country: 'Georgia', city: 'Tbilisi' },
+  { iata: 'KUT', country: 'Georgia', city: 'Kutaisi' },
+  { iata: 'GYD', country: 'Azerbaijan', city: 'Baku' },
+  { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
+  { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
+];
 
-let azjaFlightsCache = {}; // klucz: from-to, wartość: tablica lotów
+let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to listy lotów
 let lastAzjaRefresh = null;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
-// Limit równoległych zapytań
 const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
 function generateCacheKey(from, to) {
@@ -47,8 +74,8 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
 }
 
 async function refreshAzjaFlightsRoundtrip() {
-  console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów POZ → ICN.`);
-
+  console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
+  
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
 
@@ -63,44 +90,46 @@ async function refreshAzjaFlightsRoundtrip() {
     d.setMonth(d.getMonth() + 1);
   }
 
-  const key = generateCacheKey('POZ', 'ICN');
-  azjaFlightsCache[key] = [];
-
   const tasks = [];
-  for (let i = 0; i < months.length; i++) {
-    for (let j = i; j < months.length; j++) {
-      tasks.push(limit(async () => {
-        try {
-          const flight = await fetchRoundtripData('POZ', 'ICN', months[i], months[j]);
-          if (flight && flight.data) {
-            azjaFlightsCache[key].push(flight);
-            console.log(`Pobrano roundtrip: POZ → ICN ${months[i]} → ${months[j]}`);
-          }
-        } catch (e) {
-          console.error(`Błąd pobierania lotów POZ → ICN ${months[i]} → ${months[j]}: ${e.message}`);
+  for (const from of searchFromAirports) {
+    for (const dest of azjaAirports) {
+      const key = generateCacheKey(from, dest.iata);
+      if (!azjaFlightsCache[key]) azjaFlightsCache[key] = [];
+      for (let i = 0; i < months.length; i++) {
+        for (let j = i; j < months.length; j++) {
+          tasks.push(limit(async () => {
+            try {
+              const flight = await fetchRoundtripData(from, dest.iata, months[i], months[j]);
+              if (flight && flight.data) {
+                // Dodajemy minimalną cenę jako price jeśli jest, inaczej Infinity
+                const price = (flight.data.MinPrice !== undefined && flight.data.MinPrice !== null) ? flight.data.MinPrice : Infinity;
+                azjaFlightsCache[key].push({ ...flight, price });
+                console.log(`Pobrano roundtrip: ${from} → ${dest.iata} ${months[i]} → ${months[j]}`);
+              }
+            } catch (e) {
+              console.error(`Błąd pobierania lotów ${from} → ${dest.iata} ${months[i]} → ${months[j]}: ${e.message}`);
+            }
+          }));
         }
-      }));
+      }
     }
   }
-
   await Promise.all(tasks);
 
-  // Posortuj cache po cenie jeśli jest w danych MinPrice, lub else ustaw cenę na Infinity  
-  azjaFlightsCache[key] = azjaFlightsCache[key]
-    .filter(f => f.data) // filtrujemy null lub brak danych
-    .map(f => ({
-      ...f,
-      price: (f.data.MinPrice !== undefined && f.data.MinPrice !== null) ? f.data.MinPrice : Infinity,
-    }))
-    .sort((a, b) => a.price - b.price)
-    .slice(0, 20);
+  // Sortujemy i 'tniemy' do 20 najtańszych dla każdego klucza cache
+  Object.keys(azjaFlightsCache).forEach(key => {
+    azjaFlightsCache[key] = azjaFlightsCache[key]
+      .filter(f => typeof f.price === 'number')
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 20);
+  });
 
   lastAzjaRefresh = new Date();
-  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${azjaFlightsCache[key].length}`);
+  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)}`);
 }
 
 app.get('/api/azja-flights', (req, res) => {
-  res.json({ refreshed: lastAzjaRefresh, flightsByRoute: azjaFlightsCache });
+  res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
 refreshAzjaFlightsRoundtrip();
