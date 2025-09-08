@@ -121,7 +121,7 @@ async function refreshAzjaFlightsRoundtrip() {
     azjaFlightsCache[key] = azjaFlightsCache[key]
       .filter(f => typeof f.price === 'number')
       .sort((a, b) => a.price - b.price)
-      .slice(0, 10);
+      .slice(0, 20);
   });
 
   lastAzjaRefresh = new Date();
