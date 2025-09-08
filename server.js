@@ -35,7 +35,7 @@ const azjaAirports = [
   { iata: 'KUT', country: 'Georgia', city: 'Kutaisi' },
   { iata: 'GYD', country: 'Azerbaijan', city: 'Baku' },
   { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
-  { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
+  { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' }
 ];
 
 app.use(cors());
@@ -190,4 +190,5 @@ setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
