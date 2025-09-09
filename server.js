@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA'];
+const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA','BER','BUD','VIE'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -138,3 +138,4 @@ setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
