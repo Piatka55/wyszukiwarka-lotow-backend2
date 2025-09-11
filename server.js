@@ -121,7 +121,7 @@ async function refreshAzjaFlightsRoundtrip() {
     azjaFlightsCache[key] = azjaFlightsCache[key]
       .filter(f => typeof f.price === 'number')
       .sort((a, b) => a.price - b.price)
-      .slice(0, 20);
+      .slice(0, 15);
   });
 
   lastAzjaRefresh = new Date();
@@ -138,5 +138,6 @@ setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
