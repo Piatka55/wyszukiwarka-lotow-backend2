@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA','BER','BUD','VIE','PRG'];
+const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA', 'BER', 'BUD', 'VIE', 'PRG'];
+
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -38,7 +39,7 @@ const azjaAirports = [
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
 
-let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to listy lotów
+let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to lista max 5 najtańszych lotów
 let lastAzjaRefresh = null;
 
 app.use(cors());
@@ -73,9 +74,20 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   }
 }
 
+// Funkcja utrzymująca max 5 najtańszych lotów na trasę
+function insertToTopFive(arr, flight) {
+  if (!flight || typeof flight.price !== 'number') return;
+  if (arr.length < 5) {
+    arr.push(flight);
+    arr.sort((a, b) => a.price - b.price);
+  } else if (flight.price < arr[arr.length - 1].price) {
+    arr[arr.length - 1] = flight;
+    arr.sort((a, b) => a.price - b.price);
+  }
+}
+
 async function refreshAzjaFlightsRoundtrip() {
   console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
-  
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
 
@@ -86,24 +98,27 @@ async function refreshAzjaFlightsRoundtrip() {
   const months = [];
   let d = new Date(now.getFullYear(), now.getMonth(), 1);
   while (d <= endDate) {
-    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     d.setMonth(d.getMonth() + 1);
   }
 
   const tasks = [];
+
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
       const key = generateCacheKey(from, dest.iata);
-      if (!azjaFlightsCache[key]) azjaFlightsCache[key] = [];
+      azjaFlightsCache[key] = [];
+
       for (let i = 0; i < months.length; i++) {
         for (let j = i; j < months.length; j++) {
           tasks.push(limit(async () => {
             try {
               const flight = await fetchRoundtripData(from, dest.iata, months[i], months[j]);
               if (flight && flight.data) {
-                // Dodajemy minimalną cenę jako price jeśli jest, inaczej Infinity
-                const price = (flight.data.MinPrice !== undefined && flight.data.MinPrice !== null) ? flight.data.MinPrice : Infinity;
-                azjaFlightsCache[key].push({ ...flight, price });
+                const price = (flight.data.MinPrice !== undefined && flight.data.MinPrice !== null)
+                  ? flight.data.MinPrice
+                  : Infinity;
+                insertToTopFive(azjaFlightsCache[key], { ...flight, price });
                 console.log(`Pobrano roundtrip: ${from} → ${dest.iata} ${months[i]} → ${months[j]}`);
               }
             } catch (e) {
@@ -114,18 +129,13 @@ async function refreshAzjaFlightsRoundtrip() {
       }
     }
   }
+
   await Promise.all(tasks);
 
-  // Sortujemy i 'tniemy' do 20 najtańszych dla każdego klucza cache
-  Object.keys(azjaFlightsCache).forEach(key => {
-    azjaFlightsCache[key] = azjaFlightsCache[key]
-      .filter(f => typeof f.price === 'number')
-      .sort((a, b) => a.price - b.price)
-      .slice(0, 15);
-  });
-
   lastAzjaRefresh = new Date();
-  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)}`);
+  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${
+    Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)
+  }`);
 }
 
 app.get('/api/azja-flights', (req, res) => {
@@ -138,6 +148,3 @@ setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
-
-
-
