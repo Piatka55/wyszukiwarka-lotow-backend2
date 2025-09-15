@@ -2,14 +2,11 @@ const express = require('express');
 const { request } = require('undici');
 const pLimit = require('p-limit').default;
 const cors = require('cors');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
-
 const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA', 'BER', 'BUD', 'VIE', 'PRG'];
-
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -38,7 +35,6 @@ const azjaAirports = [
   { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
-
 let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to lista max 5 najtańszych lotów
 let lastAzjaRefresh = null;
 
@@ -74,7 +70,6 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   }
 }
 
-// Funkcja utrzymująca max 5 najtańszych lotów na trasę
 function insertToTopFive(arr, flight) {
   if (!flight || typeof flight.price !== 'number') return;
   if (arr.length < 5) {
@@ -90,25 +85,20 @@ async function refreshAzjaFlightsRoundtrip() {
   console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
-
   const now = new Date();
   const endDate = new Date(now);
   endDate.setMonth(endDate.getMonth() + 6);
-
   const months = [];
   let d = new Date(now.getFullYear(), now.getMonth(), 1);
   while (d <= endDate) {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     d.setMonth(d.getMonth() + 1);
   }
-
   const tasks = [];
-
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
       const key = generateCacheKey(from, dest.iata);
       azjaFlightsCache[key] = [];
-
       for (let i = 0; i < months.length; i++) {
         for (let j = i; j < months.length; j++) {
           tasks.push(limit(async () => {
@@ -129,9 +119,7 @@ async function refreshAzjaFlightsRoundtrip() {
       }
     }
   }
-
   await Promise.all(tasks);
-
   lastAzjaRefresh = new Date();
   console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${
     Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)
@@ -142,8 +130,9 @@ app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
-refreshAzjaFlightsRoundtrip();
-setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
+// Usuń wywołanie automatyczne i setInterval
+// refreshAzjaFlightsRoundtrip();
+// setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
