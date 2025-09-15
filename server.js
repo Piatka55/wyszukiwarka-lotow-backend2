@@ -130,9 +130,16 @@ app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
-// Usuń wywołanie automatyczne i setInterval
-// refreshAzjaFlightsRoundtrip();
-// setInterval(refreshAzjaFlightsRoundtrip, 15 * 60 * 1000);
+// Endpoint do ręcznego odświeżania cache
+app.post('/api/refresh-azja', async (req, res) => {
+  try {
+    await refreshAzjaFlightsRoundtrip();
+    res.json({ status: 'success', refreshed: lastAzjaRefresh });
+  } catch (error) {
+    console.error(`Błąd w endpoint /api/refresh-azja: ${error.message}`);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
