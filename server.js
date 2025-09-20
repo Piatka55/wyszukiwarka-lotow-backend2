@@ -8,34 +8,10 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA', 'BER', 'BUD', 'VIE', 'PRG'];
+// Skrócona lista lotnisk do testów
+const searchFromAirports = ['POZ'];
 const azjaAirports = [
-  { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
-  { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
-  { iata: 'PEK', country: 'China', city: 'Beijing' },
-  { iata: 'PVG', country: 'China', city: 'Shanghai' },
-  { iata: 'HND', country: 'Japan', city: 'Tokyo' },
-  { iata: 'NRT', country: 'Japan', city: 'Tokyo' },
-  { iata: 'ICN', country: 'South Korea', city: 'Seoul' },
-  { iata: 'SGN', country: 'Vietnam', city: 'Ho Chi Minh City' },
-  { iata: 'HAN', country: 'Vietnam', city: 'Hanoi' },
-  { iata: 'NQZ', country: 'Kazakhstan', city: 'Astana' },
-  { iata: 'ALA', country: 'Kazakhstan', city: 'Almaty' },
-  { iata: 'MNL', country: 'Philippines', city: 'Manila' },
-  { iata: 'CGK', country: 'Indonesia', city: 'Jakarta' },
-  { iata: 'DPS', country: 'Indonesia', city: 'Bali Denpasar' },
-  { iata: 'CMB', country: 'Sri Lanka', city: 'Colombo' },
-  { iata: 'DEL', country: 'India', city: 'Delhi' },
-  { iata: 'MCT', country: 'Oman', city: 'Muscat' },
-  { iata: 'DOH', country: 'Qatar', city: 'Doha' },
-  { iata: 'DXB', country: 'United Arab Emirates', city: 'Dubai' },
-  { iata: 'AUH', country: 'United Arab Emirates', city: 'Abu Dhabi' },
-  { iata: 'SIN', country: 'Singapore', city: 'Singapore' },
-  { iata: 'TBS', country: 'Georgia', city: 'Tbilisi' },
   { iata: 'KUT', country: 'Georgia', city: 'Kutaisi' },
-  { iata: 'GYD', country: 'Azerbaijan', city: 'Baku' },
-  { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
-  { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
 
 let azjaFlightsCache = {};
@@ -75,7 +51,6 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   }
 }
 
-// Generuje pary (M, M) i (M, M+1) na 12 miesięcy do przodu
 function generateOutboundInboundMonthPairs(startDate) {
   const months = [];
   const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 12, 1);
@@ -87,10 +62,7 @@ function generateOutboundInboundMonthPairs(startDate) {
 
   const pairs = [];
   for (let i = 0; i < months.length; i++) {
-    // Para (M, M) - wylot i powrót w tym samym miesiącu
     pairs.push({ monthOutbound: months[i], monthInbound: months[i] });
-
-    // Para (M, M+1) - wylot w danym miesiącu, powrót w następnym
     if (i + 1 < months.length) {
       pairs.push({ monthOutbound: months[i], monthInbound: months[i + 1] });
     }
@@ -104,7 +76,6 @@ async function refreshAzjaFlightsRoundtrip() {
   lastAzjaRefresh = new Date();
   const now = new Date();
 
-  // Generujemy wszystkie potrzebne pary miesięcy
   const monthPairs = generateOutboundInboundMonthPairs(now);
 
   const tasks = [];
@@ -115,12 +86,24 @@ async function refreshAzjaFlightsRoundtrip() {
           try {
             const flightData = await fetchRoundtripData(from, dest.iata, monthOutbound, monthInbound);
             if (flightData) {
-              // Zmieniamy klucz cache na KRAJ-MIESIĄC, żeby dane nie były nadpisywane
               const key = `${dest.country}-${monthOutbound}`;
               if (!azjaFlightsCache[key]) {
                 azjaFlightsCache[key] = [];
               }
-              azjaFlightsCache[key].push(flightData);
+              const validFlights = Object.values(flightData.data.PriceGrids.Grid)
+                .flatMap(row => row)
+                .filter(cell => cell && cell.Indirect && cell.Indirect.Price && cell.Indirect.Duration)
+                .filter(cell => cell.Indirect.Duration >= 4 && cell.Indirect.Duration <= 21)
+                .map(cell => ({
+                  from: flightData.from,
+                  to: flightData.to,
+                  price: cell.Indirect.Price,
+                  outboundDate: `${flightData.monthOutbound}-${String(cell.OutboundDate).padStart(2, '0')}`,
+                  inboundDate: `${flightData.monthInbound}-${String(cell.InboundDate).padStart(2, '0')}`,
+                  duration: cell.Indirect.Duration,
+                  url: `https://www.skyscanner.pl/transport/loty/${flightData.from}/${flightData.to}/${flightData.monthOutbound}-${String(cell.OutboundDate).padStart(2, '0')}/${flightData.monthInbound}-${String(cell.InboundDate).padStart(2, '0')}/`,
+                }));
+              azjaFlightsCache[key].push(...validFlights);
             }
           } catch (e) {
             console.error(`Błąd pobierania lotów ${from} → ${dest.iata} ${monthOutbound} → ${monthInbound}: ${e.message}`);
@@ -132,17 +115,9 @@ async function refreshAzjaFlightsRoundtrip() {
 
   await Promise.all(tasks);
 
-  // Zoptymalizowany etap: posortowanie i ograniczenie liczby wyników
   for (const key in azjaFlightsCache) {
     azjaFlightsCache[key] = azjaFlightsCache[key]
-      .map(flight => {
-        const prices = Object.values(flight.data.PriceGrids.Grid).flatMap(row =>
-          row.filter(cell => cell && cell.Indirect && cell.Indirect.Price).map(cell => cell.Indirect.Price)
-        );
-        const minPrice = prices.length > 0 ? Math.min(...prices) : Infinity;
-        return { ...flight, minPrice };
-      })
-      .sort((a, b) => a.minPrice - b.minPrice)
+      .sort((a, b) => a.price - b.price)
       .slice(0, 5);
   }
 
