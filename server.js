@@ -82,7 +82,6 @@ function insertToTopFive(arr, flight) {
   }
 }
 
-// WERSJA GENERUJĄCA TYLKO (M, M) oraz (M, M+1)
 function generateOutboundInboundMonthPairs(startDate, endDate) {
   const months = [];
   let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
@@ -108,7 +107,6 @@ async function refreshAzjaFlightsRoundtrip() {
   const startDate = new Date(2025, 8, 20); // 2025-09-20
   const endDate = new Date(2026, 7, 30);  // 2026-08-30
   const monthPairs = generateOutboundInboundMonthPairs(startDate, endDate);
-
   const tasks = [];
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
@@ -151,6 +149,14 @@ app.post('/api/refresh-azja', async (req, res) => {
     console.error(`Błąd w endpoint /api/refresh-azja: ${error.message}`);
     res.status(500).json({ status: 'error', message: error.message });
   }
+});
+
+// Endpoint do ręcznego czyszczenia cache lotów
+app.post('/api/clear-cache', (req, res) => {
+  azjaFlightsCache = {};
+  lastAzjaRefresh = null;
+  console.log('Cache został wyczyszczony ręcznie.');
+  res.json({ status: 'success', message: 'Cache wyczyszczony' });
 });
 
 app.listen(PORT, () => {
