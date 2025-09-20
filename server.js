@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA', 'BER', 'BUD', 'VIE', 'PRG'];
+const searchFromAirports = ['POZ'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -37,7 +37,7 @@ const azjaAirports = [
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
 
-let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to lista max 5 najtańszych lotów
+let azjaFlightsCache = {};
 let lastAzjaRefresh = null;
 
 app.use(cors());
@@ -82,19 +82,20 @@ function insertToTopFive(arr, flight) {
   }
 }
 
-// GENERATOR PAR (M,M) i (M,M+1) – WERSJA DOCELNA
+// WERSJA GENERUJĄCA TYLKO (M, M) oraz (M, M+1)
 function generateOutboundInboundMonthPairs(startDate, endDate) {
   const months = [];
   let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  while (d <= endDate) {
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  while (d <= end) {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     d.setMonth(d.getMonth() + 1);
   }
   const pairs = [];
   for (let i = 0; i < months.length; i++) {
-    pairs.push([months[i], months[i]]); // (M, M)
+    pairs.push([months[i], months[i]]);
     if (i + 1 < months.length) {
-      pairs.push([months[i], months[i + 1]]); // (M, M+1)
+      pairs.push([months[i], months[i + 1]]);
     }
   }
   return pairs;
@@ -104,12 +105,10 @@ async function refreshAzjaFlightsRoundtrip() {
   console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
-  const now = new Date();
-  const endDate = new Date(now);
-  endDate.setMonth(endDate.getMonth() + 6);
+  const startDate = new Date(2025, 8, 20); // 2025-09-20
+  const endDate = new Date(2026, 7, 30);  // 2026-08-30
+  const monthPairs = generateOutboundInboundMonthPairs(startDate, endDate);
 
-  // Generowanie poprawnych par (wylot, powrót)
-  const monthPairs = generateOutboundInboundMonthPairs(now, endDate);
   const tasks = [];
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
@@ -144,7 +143,6 @@ app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
-// Endpoint do ręcznego odświeżania cache
 app.post('/api/refresh-azja', async (req, res) => {
   try {
     await refreshAzjaFlightsRoundtrip();
