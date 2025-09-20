@@ -38,7 +38,7 @@ const azjaAirports = [
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
 
-let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to lista max 5 najtańszych lotów
+let azjaFlightsCache = {};
 let lastAzjaRefresh = null;
 
 app.use(cors());
@@ -46,10 +46,6 @@ app.use(express.json());
 app.use(express.static('.'));
 
 const limit = pLimit(MAX_CONCURRENT_REQUESTS);
-
-function generateCacheKey(from, to) {
-  return `${from}-${to}`;
-}
 
 async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   const url = `https://www.skyscanner.se/g/monthviewservice/PL/PLN/pl-PL/calendar/${from}/${to}/${monthOutbound}/${monthInbound}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
@@ -64,7 +60,13 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
         continue;
       }
       const text = await body.text();
-      return { from, to, monthOutbound, monthInbound, data: JSON.parse(text) };
+      const parsedData = JSON.parse(text);
+
+      if (!parsedData || !parsedData.PriceGrids) {
+        console.log(`Brak danych lotów dla ${from} -> ${to} w ${monthOutbound}`);
+        return null;
+      }
+      return { from, to, monthOutbound, monthInbound, data: parsedData };
     } catch (e) {
       if (attempts >= 2) throw e;
       console.error(`Błąd pobierania (retry ${attempts}): ${url} - ${e.message}`);
@@ -73,63 +75,52 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   }
 }
 
-function insertToTopFive(arr, flight) {
-  if (!flight || typeof flight.price !== 'number') return;
-  if (arr.length < 5) {
-    arr.push(flight);
-    arr.sort((a, b) => a.price - b.price);
-  } else if (flight.price < arr[arr.length - 1].price) {
-    arr[arr.length - 1] = flight;
-    arr.sort((a, b) => a.price - b.price);
-  }
-}
-
-// Generate only (M, M) and (M, M+1) pairs
-function generateOutboundInboundMonthPairs(startDate, endDate) {
+// Generuje pary (M, M) i (M, M+1) na 12 miesięcy do przodu
+function generateOutboundInboundMonthPairs(startDate) {
   const months = [];
+  const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 12, 1);
   let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
   while (d <= endDate) {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     d.setMonth(d.getMonth() + 1);
   }
+
   const pairs = [];
   for (let i = 0; i < months.length; i++) {
-    // (M, M)
-    pairs.push([months[i], months[i]]);
-    // (M, M+1)
+    // Para (M, M) - wylot i powrót w tym samym miesiącu
+    pairs.push({ monthOutbound: months[i], monthInbound: months[i] });
+
+    // Para (M, M+1) - wylot w danym miesiącu, powrót w następnym
     if (i + 1 < months.length) {
-      pairs.push([months[i], months[i + 1]]);
+      pairs.push({ monthOutbound: months[i], monthInbound: months[i + 1] });
     }
   }
   return pairs;
 }
 
 async function refreshAzjaFlightsRoundtrip() {
-  console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
+  console.log(`[${new Date().toISOString()}] Start odświeżania lotów do Azji.`);
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
   const now = new Date();
-  const endDate = new Date(now);
-  endDate.setMonth(endDate.getMonth() + 6);
 
-  // Generate valid (outbound, inbound) month pairs
-  const monthPairs = generateOutboundInboundMonthPairs(now, endDate);
+  // Generujemy wszystkie potrzebne pary miesięcy
+  const monthPairs = generateOutboundInboundMonthPairs(now);
 
   const tasks = [];
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
-      const key = generateCacheKey(from, dest.iata);
-      azjaFlightsCache[key] = [];
-      for (const [monthOutbound, monthInbound] of monthPairs) {
+      for (const { monthOutbound, monthInbound } of monthPairs) {
         tasks.push(limit(async () => {
           try {
-            const flight = await fetchRoundtripData(from, dest.iata, monthOutbound, monthInbound);
-            if (flight && flight.data) {
-              const price = (flight.data.MinPrice !== undefined && flight.data.MinPrice !== null)
-                ? flight.data.MinPrice
-                : Infinity;
-              insertToTopFive(azjaFlightsCache[key], { ...flight, price });
-              console.log(`Pobrano roundtrip: ${from} → ${dest.iata} ${monthOutbound} → ${monthInbound}`);
+            const flightData = await fetchRoundtripData(from, dest.iata, monthOutbound, monthInbound);
+            if (flightData) {
+              // Zmieniamy klucz cache na KRAJ-MIESIĄC, żeby dane nie były nadpisywane
+              const key = `${dest.country}-${monthOutbound}`;
+              if (!azjaFlightsCache[key]) {
+                azjaFlightsCache[key] = [];
+              }
+              azjaFlightsCache[key].push(flightData);
             }
           } catch (e) {
             console.error(`Błąd pobierania lotów ${from} → ${dest.iata} ${monthOutbound} → ${monthInbound}: ${e.message}`);
@@ -138,18 +129,31 @@ async function refreshAzjaFlightsRoundtrip() {
       }
     }
   }
+
   await Promise.all(tasks);
+
+  // Zoptymalizowany etap: posortowanie i ograniczenie liczby wyników
+  for (const key in azjaFlightsCache) {
+    azjaFlightsCache[key] = azjaFlightsCache[key]
+      .map(flight => {
+        const prices = Object.values(flight.data.PriceGrids.Grid).flatMap(row =>
+          row.filter(cell => cell && cell.Indirect && cell.Indirect.Price).map(cell => cell.Indirect.Price)
+        );
+        const minPrice = prices.length > 0 ? Math.min(...prices) : Infinity;
+        return { ...flight, minPrice };
+      })
+      .sort((a, b) => a.minPrice - b.minPrice)
+      .slice(0, 5);
+  }
+
   lastAzjaRefresh = new Date();
-  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${
-    Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)
-  }`);
+  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie lotów do Azji zakończone. Liczba grup: ${Object.keys(azjaFlightsCache).length}`);
 }
 
 app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
-// Endpoint do ręcznego odświeżania cache
 app.post('/api/refresh-azja', async (req, res) => {
   try {
     await refreshAzjaFlightsRoundtrip();
@@ -163,3 +167,5 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
+refreshAzjaFlightsRoundtrip();
