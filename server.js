@@ -6,7 +6,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
-
 const searchFromAirports = ['POZ'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
@@ -36,29 +35,25 @@ const azjaAirports = [
   { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
-
 let azjaFlightsCache = {};
 let lastAzjaRefresh = null;
-
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 const limit = pLimit(MAX_CONCURRENT_REQUESTS);
-
 function generateCacheKey(from, to) {
   return `${from}-${to}`;
 }
-
 async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   const url = `https://www.skyscanner.se/g/monthviewservice/PL/PLN/pl-PL/calendar/${from}/${to}/${monthOutbound}/${monthInbound}/?profile=minimalmonthviewgridv2&apikey=${API_KEY}`;
   let attempts = 0;
   while (attempts < 2) {
     attempts++;
     try {
-      const { body, statusCode } = await request(url);
-      if (statusCode !== 200) {
-        if (attempts >= 2) throw new Error(`Błąd API status ${statusCode} dla ${url}`);
-        console.log(`Status ${statusCode}, retry ${attempts} dla ${url}`);
+      const { body, status } = await request(url);
+      if (status !== 200) {
+        if (attempts >= 2) throw new Error(`Błąd API status ${status} dla ${url}`);
+        console.log(`Status ${status}, retry ${attempts} dla ${url}`);
         continue;
       }
       const text = await body.text();
@@ -70,7 +65,6 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
     }
   }
 }
-
 function insertToTopFive(arr, flight) {
   if (!flight || typeof flight.price !== 'number') return;
   if (arr.length < 5) {
@@ -81,7 +75,6 @@ function insertToTopFive(arr, flight) {
     arr.sort((a, b) => a.price - b.price);
   }
 }
-
 function generateOutboundInboundMonthPairs(startDate, endDate) {
   const months = [];
   let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
@@ -99,7 +92,6 @@ function generateOutboundInboundMonthPairs(startDate, endDate) {
   }
   return pairs;
 }
-
 async function refreshAzjaFlightsRoundtrip() {
   console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
   azjaFlightsCache = {};
@@ -136,11 +128,9 @@ async function refreshAzjaFlightsRoundtrip() {
     Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)
   }`);
 }
-
 app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
-
 app.post('/api/refresh-azja', async (req, res) => {
   try {
     await refreshAzjaFlightsRoundtrip();
@@ -150,7 +140,6 @@ app.post('/api/refresh-azja', async (req, res) => {
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
-
 // Endpoint do ręcznego czyszczenia cache lotów
 app.post('/api/clear-cache', (req, res) => {
   azjaFlightsCache = {};
@@ -158,7 +147,6 @@ app.post('/api/clear-cache', (req, res) => {
   console.log('Cache został wyczyszczony ręcznie.');
   res.json({ status: 'success', message: 'Cache wyczyszczony' });
 });
-
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
