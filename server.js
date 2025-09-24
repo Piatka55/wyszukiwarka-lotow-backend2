@@ -46,8 +46,8 @@ app.use(express.static('.'));
 
 const limit = pLimit(MAX_CONCURRENT_REQUESTS);
 
-function generateCacheKey(from, to) {
-  return `${from}-${to}`;
+function generateCacheKey(from, to, monthOutbound, monthInbound) {
+  return `${from}-${to}-${monthOutbound}-${monthInbound}`;
 }
 
 async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
@@ -100,9 +100,9 @@ async function refreshAzjaFlightsRoundtrip() {
   const tasks = [];
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
-      const key = generateCacheKey(from, dest.iata);
-      azjaFlightsCache[key] = [];
       for (const [monthOutbound, monthInbound] of monthPairs) {
+        const key = generateCacheKey(from, dest.iata, monthOutbound, monthInbound);
+        if (!azjaFlightsCache[key]) azjaFlightsCache[key] = [];
         tasks.push(limit(async () => {
           try {
             const flight = await fetchRoundtripData(from, dest.iata, monthOutbound, monthInbound);
@@ -110,7 +110,15 @@ async function refreshAzjaFlightsRoundtrip() {
               const price = (flight.data.MinPrice !== undefined && flight.data.MinPrice !== null)
                 ? flight.data.MinPrice
                 : Infinity;
-              azjaFlightsCache[key].push({ ...flight, price });
+
+              const arr = azjaFlightsCache[key];
+              if (arr.length < 5) {
+                arr.push({ ...flight, price });
+                arr.sort((a, b) => a.price - b.price);
+              } else if (price < arr[arr.length - 1].price) {
+                arr[arr.length - 1] = { ...flight, price };
+                arr.sort((a, b) => a.price - b.price);
+              }
             }
           } catch (e) {
             console.error(`Błąd pobierania lotów ${from} → ${dest.iata} ${monthOutbound} → ${monthInbound}: ${e.message}`);
@@ -120,16 +128,9 @@ async function refreshAzjaFlightsRoundtrip() {
     }
   }
   await Promise.all(tasks);
-
-  for (const key in azjaFlightsCache) {
-    azjaFlightsCache[key].sort((a, b) => a.price - b.price);
-    azjaFlightsCache[key] = azjaFlightsCache[key].slice(0, 100);
-  }
-
   lastAzjaRefresh = new Date();
-  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${
-    Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0)
-  }`);
+  const totalEntries = Object.values(azjaFlightsCache).reduce((sum, arr) => sum + arr.length, 0);
+  console.log(`[${lastAzjaRefresh.toISOString()}] Odświeżenie roundtrip zakończone. Wpisów w cache: ${totalEntries}`);
 }
 
 app.get('/api/azja-flights', (req, res) => {
