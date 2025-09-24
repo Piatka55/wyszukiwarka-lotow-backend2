@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
-const searchFromAirports = ['POZ'];
+const searchFromAirports = ['POZ', 'KTW', 'WAW', 'KRK', 'GDA', 'BER', 'BUD', 'VIE', 'PRG'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
   { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -35,7 +35,7 @@ const azjaAirports = [
   { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
   { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
-let azjaFlightsCache = {};
+let azjaFlightsCache = {}; // klucze 'FROM-TO', wartości to lista max 5 najtańszych lotów
 let lastAzjaRefresh = null;
 app.use(cors());
 app.use(express.json());
@@ -50,10 +50,10 @@ async function fetchRoundtripData(from, to, monthOutbound, monthInbound) {
   while (attempts < 2) {
     attempts++;
     try {
-      const { body, status } = await request(url);
-      if (status !== 200) {
-        if (attempts >= 2) throw new Error(`Błąd API status ${status} dla ${url}`);
-        console.log(`Status ${status}, retry ${attempts} dla ${url}`);
+      const { body, statusCode } = await request(url);
+      if (statusCode !== 200) {
+        if (attempts >= 2) throw new Error(`Błąd API status ${statusCode} dla ${url}`);
+        console.log(`Status ${statusCode}, retry ${attempts} dla ${url}`);
         continue;
       }
       const text = await body.text();
@@ -75,17 +75,19 @@ function insertToTopFive(arr, flight) {
     arr.sort((a, b) => a.price - b.price);
   }
 }
+// Generate only (M, M) and (M, M+1) pairs
 function generateOutboundInboundMonthPairs(startDate, endDate) {
   const months = [];
   let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-  while (d <= end) {
+  while (d <= endDate) {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     d.setMonth(d.getMonth() + 1);
   }
   const pairs = [];
   for (let i = 0; i < months.length; i++) {
+    // (M, M)
     pairs.push([months[i], months[i]]);
+    // (M, M+1)
     if (i + 1 < months.length) {
       pairs.push([months[i], months[i + 1]]);
     }
@@ -96,9 +98,11 @@ async function refreshAzjaFlightsRoundtrip() {
   console.log(`[${new Date().toISOString()}] Start odświeżania roundtrip lotów do Azji.`);
   azjaFlightsCache = {};
   lastAzjaRefresh = new Date();
-  const startDate = new Date(2025, 8, 20); // 2025-09-20
-  const endDate = new Date(2026, 7, 30);  // 2026-08-30
-  const monthPairs = generateOutboundInboundMonthPairs(startDate, endDate);
+  const now = new Date();
+  const endDate = new Date(now);
+  endDate.setMonth(endDate.getMonth() + 6);
+  // Generate valid (outbound, inbound) month pairs
+  const monthPairs = generateOutboundInboundMonthPairs(now, endDate);
   const tasks = [];
   for (const from of searchFromAirports) {
     for (const dest of azjaAirports) {
@@ -131,6 +135,7 @@ async function refreshAzjaFlightsRoundtrip() {
 app.get('/api/azja-flights', (req, res) => {
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
+// Endpoint do ręcznego odświeżania cache
 app.post('/api/refresh-azja', async (req, res) => {
   try {
     await refreshAzjaFlightsRoundtrip();
@@ -139,13 +144,6 @@ app.post('/api/refresh-azja', async (req, res) => {
     console.error(`Błąd w endpoint /api/refresh-azja: ${error.message}`);
     res.status(500).json({ status: 'error', message: error.message });
   }
-});
-// Endpoint do ręcznego czyszczenia cache lotów
-app.post('/api/clear-cache', (req, res) => {
-  azjaFlightsCache = {};
-  lastAzjaRefresh = null;
-  console.log('Cache został wyczyszczony ręcznie.');
-  res.json({ status: 'success', message: 'Cache wyczyszczony' });
 });
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
