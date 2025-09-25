@@ -134,6 +134,7 @@ async function refreshAzjaFlightsRoundtrip() {
 }
 
 app.get('/api/azja-flights', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // cache na 1 godzinę
   res.json({ refreshed: lastAzjaRefresh, flightsByCountry: azjaFlightsCache });
 });
 
@@ -150,4 +151,3 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
-
