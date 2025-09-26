@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['WAW','POZ','KRK','BUD','VIE','PRG','BER','FRA','CDG','OSL','ARN','AMS','MXP','BRU'];
+const searchFromAirports = ['WAW','KRK','BUD','VIE','PRG','BER','FRA','CDG','OSL','ARN','AMS','MXP','BRU'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
 { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -41,15 +41,9 @@ const azjaAirports = [
 { iata: 'BOM', country: 'India', city: 'Mumbai' },
 { iata: 'PKX', country: 'China', city: 'Beijing' },
 { iata: 'JED', country: 'Saudi Arabia', city: 'Jeddah' },
-{ iata: 'CKG', country: 'China', city: 'Chongqing' },
 { iata: 'HGH', country: 'China', city: 'Hangzhou' },
 { iata: 'SHA', country: 'China', city: 'Shanghai' },
-{ iata: 'KMG', country: 'China', city: 'Kunming' },
-{ iata: 'XIY', country: 'China', city: 'Xian' },
 { iata: 'TPE', country: 'Taiwan', city: 'Taipei' },
-{ iata: 'BLR', country: 'India', city: 'Bangalore' },
-{ iata: 'CJU', country: 'South Korea', city: 'Jeju' },
-{ iata: 'CGO', country: 'China', city: 'Zhengzhou' },
 ];
 
 let azjaFlightsCache = {};
@@ -166,5 +160,6 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
