@@ -10,40 +10,31 @@ const MAX_CONCURRENT_REQUESTS = 5;
 const searchFromAirports = ['WAW','BUD','VIE','PRG','BER','FRA','CDG','OSL','ARN','AMS','MXP'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
-{ iata: 'HKT', country: 'Thailand', city: 'Phuket' },
-{ iata: 'PEK', country: 'China', city: 'Beijing' },
-{ iata: 'PVG', country: 'China', city: 'Shanghai' },
-{ iata: 'HND', country: 'Japan', city: 'Tokyo' },
-{ iata: 'NRT', country: 'Japan', city: 'Tokyo' },
-{ iata: 'ICN', country: 'South Korea', city: 'Seoul' },
-{ iata: 'SGN', country: 'Vietnam', city: 'Ho Chi Minh City' },
-{ iata: 'HAN', country: 'Vietnam', city: 'Hanoi' },
-{ iata: 'NQZ', country: 'Kazakhstan', city: 'Astana' },
-{ iata: 'ALA', country: 'Kazakhstan', city: 'Almaty' },
-{ iata: 'MNL', country: 'Philippines', city: 'Manila' },
-{ iata: 'CGK', country: 'Indonesia', city: 'Jakarta' },
-{ iata: 'DPS', country: 'Indonesia', city: 'Bali Denpasar' },
-{ iata: 'CMB', country: 'Sri Lanka', city: 'Colombo' },
-{ iata: 'DEL', country: 'India', city: 'Delhi' },
-{ iata: 'MCT', country: 'Oman', city: 'Muscat' },
-{ iata: 'DOH', country: 'Qatar', city: 'Doha' },
-{ iata: 'DXB', country: 'United Arab Emirates', city: 'Dubai' },
-{ iata: 'AUH', country: 'United Arab Emirates', city: 'Abu Dhabi' },
-{ iata: 'SIN', country: 'Singapore', city: 'Singapore' },
-{ iata: 'TBS', country: 'Georgia', city: 'Tbilisi' },
-{ iata: 'KUT', country: 'Georgia', city: 'Kutaisi' },
-{ iata: 'GYD', country: 'Azerbaijan', city: 'Baku' },
-{ iata: 'IST', country: 'Turkey', city: 'Istanbul' },
-{ iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
-{ iata: 'CAN', country: 'China', city: 'Guangzhou' },
-{ iata: 'HKG', country: 'Hong Kong', city: 'Hong Kong' },
-{ iata: 'KUL', country: 'Malaysia', city: 'Kuala Lumpur' },
-{ iata: 'BOM', country: 'India', city: 'Mumbai' },
-{ iata: 'PKX', country: 'China', city: 'Beijing' },
-{ iata: 'JED', country: 'Saudi Arabia', city: 'Jeddah' },
-{ iata: 'HGH', country: 'China', city: 'Hangzhou' },
-{ iata: 'SHA', country: 'China', city: 'Shanghai' },
-{ iata: 'TPE', country: 'Taiwan', city: 'Taipei' },
+  { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
+  { iata: 'PEK', country: 'China', city: 'Beijing' },
+  { iata: 'PVG', country: 'China', city: 'Shanghai' },
+  { iata: 'HND', country: 'Japan', city: 'Tokyo' },
+  { iata: 'NRT', country: 'Japan', city: 'Tokyo' },
+  { iata: 'ICN', country: 'South Korea', city: 'Seoul' },
+  { iata: 'SGN', country: 'Vietnam', city: 'Ho Chi Minh City' },
+  { iata: 'HAN', country: 'Vietnam', city: 'Hanoi' },
+  { iata: 'NQZ', country: 'Kazakhstan', city: 'Astana' },
+  { iata: 'ALA', country: 'Kazakhstan', city: 'Almaty' },
+  { iata: 'MNL', country: 'Philippines', city: 'Manila' },
+  { iata: 'CGK', country: 'Indonesia', city: 'Jakarta' },
+  { iata: 'DPS', country: 'Indonesia', city: 'Bali Denpasar' },
+  { iata: 'CMB', country: 'Sri Lanka', city: 'Colombo' },
+  { iata: 'DEL', country: 'India', city: 'Delhi' },
+  { iata: 'MCT', country: 'Oman', city: 'Muscat' },
+  { iata: 'DOH', country: 'Qatar', city: 'Doha' },
+  { iata: 'DXB', country: 'United Arab Emirates', city: 'Dubai' },
+  { iata: 'AUH', country: 'United Arab Emirates', city: 'Abu Dhabi' },
+  { iata: 'SIN', country: 'Singapore', city: 'Singapore' },
+  { iata: 'TBS', country: 'Georgia', city: 'Tbilisi' },
+  { iata: 'KUT', country: 'Georgia', city: 'Kutaisi' },
+  { iata: 'GYD', country: 'Azerbaijan', city: 'Baku' },
+  { iata: 'IST', country: 'Turkey', city: 'Istanbul' },
+  { iata: 'SAW', country: 'Turkey', city: 'Istanbul Sabiha' },
 ];
 
 let azjaFlightsCache = {};
@@ -160,6 +151,7 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
 
