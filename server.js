@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['WAW','KRK','BUD','VIE','PRG','BER','FRA','CDG','OSL','ARN','AMS','MXP','BRU'];
+const searchFromAirports = ['WAW','BUD','VIE','PRG','BER','FRA','CDG','OSL','ARN','AMS','MXP'];
 const azjaAirports = [
   { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
 { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -160,6 +160,7 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
 
