@@ -45,7 +45,7 @@ const azjaAirports = [
 { iata: 'HGH', country: 'China', city: 'Hangzhou' },
 { iata: 'SHA', country: 'China', city: 'Shanghai' },
 { iata: 'KMG', country: 'China', city: 'Kunming' },
-{ iata: 'XIY', country: 'China', city: 'Xi'an' },
+{ iata: 'XIY', country: 'China', city: 'Xian' },
 { iata: 'TPE', country: 'Taiwan', city: 'Taipei' },
 { iata: 'BLR', country: 'India', city: 'Bangalore' },
 { iata: 'CJU', country: 'South Korea', city: 'Jeju' },
@@ -166,4 +166,5 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
