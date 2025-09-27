@@ -23,20 +23,20 @@ const searchFromAirports = [
   'AMS', // Amsterdam Schiphol
   'MXP', // Mediolan Malpensa
   // Największe europejskie huby:
-  'IST', // Stambuł
+  //'IST', // Stambuł
   'LHR', // Londyn Heathrow
   'BCN', // Barcelona El Prat
   'MAD', // Madryt Barajas
-  'LGW', // Londyn Gatwick
+  //'LGW', // Londyn Gatwick
   'FCO', // Rzym Fiumicino
   'DUB', // Dublin
   'ZRH', // Zurych
-  'ORY', // Paryż Orly
+  //'ORY', // Paryż Orly
   'MAN', // Manchester
-  'PMI', // Palma de Mallorca
-  'SVO', // Moskwa Szeremietiewo
-  'MUC', // Monachium
-  'LIS', // Lizbona Humberto Delgado
+  //'PMI', // Palma de Mallorca
+  //'SVO', // Moskwa Szeremietiewo
+  //'MUC', // Monachium
+  //'LIS', // Lizbona Humberto Delgado
 ];
 const azjaAirports = [
 { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
@@ -196,6 +196,7 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
 
