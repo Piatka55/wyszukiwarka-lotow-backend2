@@ -7,7 +7,37 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "6f4cb8367f544db99cd1e2ea86fb2627f";
 const MAX_CONCURRENT_REQUESTS = 5;
 
-const searchFromAirports = ['WAW','KRK','BUD','VIE','PRG','BER','FRA','CDG','BRU','OSL','ARN','CPH','AMS','MXP'];
+const searchFromAirports = [
+  'WAW', // Warszawa Chopin
+  'KRK', // Kraków Balice
+  'BUD', // Budapeszt
+  'VIE', // Wiedeń
+  'PRG', // Praga
+  'BER', // Berlin
+  'FRA', // Frankfurt
+  'CDG', // Paryż Charles de Gaulle
+  'BRU', // Bruksela
+  'OSL', // Oslo
+  'ARN', // Sztokholm Arlanda
+  'CPH', // Kopenhaga
+  'AMS', // Amsterdam Schiphol
+  'MXP', // Mediolan Malpensa
+  // Największe europejskie huby:
+  'IST', // Stambuł
+  'LHR', // Londyn Heathrow
+  'BCN', // Barcelona El Prat
+  'MAD', // Madryt Barajas
+  'LGW', // Londyn Gatwick
+  'FCO', // Rzym Fiumicino
+  'DUB', // Dublin
+  'ZRH', // Zurych
+  'ORY', // Paryż Orly
+  'MAN', // Manchester
+  'PMI', // Palma de Mallorca
+  'SVO', // Moskwa Szeremietiewo
+  'MUC', // Monachium
+  'LIS', // Lizbona Humberto Delgado
+];
 const azjaAirports = [
 { iata: 'BKK', country: 'Thailand', city: 'Bangkok' },
 { iata: 'HKT', country: 'Thailand', city: 'Phuket' },
@@ -166,6 +196,7 @@ app.post('/api/refresh-azja', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na http://localhost:${PORT}`);
 });
+
 
 
 
